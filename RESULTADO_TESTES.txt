@@ -1,21 +1,24 @@
-TP1 AEDS III - GRUPO 15
-Tema: Carros
-Integrantes: Gabriel Benicio Fonseca e Rhayner Martins
+Resultados dos testes
 
-TESTE 1 - CARGA: OK
-TESTE 2 - CREATE: OK
-TESTE 3 - READ: OK
-TESTE 4 - UPDATE MESMO TAMANHO: OK
-TESTE 5 - UPDATE TAMANHO DIFERENTE: OK
-TESTE 6 - DELETE: OK
-TESTE 7 - ORDENACAO EXTERNA: OK
-TESTE 8 - CRUD DEPOIS DA ORDENACAO: OK
+Carga: OK
+Create: OK
+Read: OK
+Update mesmo tamanho: OK
+Update tamanho diferente: OK
+Delete: OK
 
-TODOS OS TESTES OBRIGATORIOS PASSARAM.
+Intercalação Balanceada: OK
+Seleção por Substituição: OK
 
-Ordenacao testada com:
-- 4 caminhos
-- maximo de 7 registros em memoria
+CRUD após ordenação: OK
 
-Resultado:
-registros=59, blocos iniciais=9, passagens de intercalacao=2
+Intercalação Balanceada:
+Registros: 59
+Runs iniciais: 9
+Passagens: 2
+
+Seleção por Substituição:
+Registros: 17
+Runs iniciais: 2
+Passagens: 1
+Registros congelados: 5
