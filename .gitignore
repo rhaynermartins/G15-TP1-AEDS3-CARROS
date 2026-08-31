@@ -1,6 +1,7 @@
 out/
 build-test/
 temp/*
+!temp/.gitkeep
 data/dados.db
 data/dados_ordenados.db
 data/*.bak
