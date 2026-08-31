@@ -1,58 +1,37 @@
-# TP1 AEDS III — Grupo 15
+# TP1 AEDS III — Carros
 
 ## Integrantes
+
 - Gabriel Benicio Fonseca
 - Rhayner Martins
 
-## Tema
-**Carros**
-
 ## Base utilizada
-- **Nome:** Auto MPG
-- **Fonte pública:** UCI Machine Learning Repository
-- **Página oficial:** https://archive.ics.uci.edu/dataset/9/auto
-- **Descrição:** base pública clássica com dados de automóveis, incluindo nome do carro, ano do modelo, cilindros, origem e dados de consumo/desempenho.
 
-Para deixar o TP1 simples de explicar e adequado aos tipos exigidos, foi preparado em `data/base.csv` um recorte didático com 60 carros. Os campos foram normalizados para a entidade usada no projeto.
+- Base: Auto MPG
+- Fonte: [UCI Machine Learning Repository](https://archive.ics.uci.edu/dataset/9/auto)
+- Arquivo do projeto: `data/base.csv`
 
-A data `data_registro` é derivada do ano do modelo e foi incluída para atender explicitamente ao requisito de um campo de data. O campo `codigo` é gerado sequencialmente pela aplicação e possui tamanho físico fixo de 8 bytes.
+O CSV contém um recorte didático de 60 automóveis. A carga converte esses dados
+para o arquivo binário utilizado pelo CRUD sequencial.
 
-## Entidade
-Classe: `model.Carro`
+## Campos
 
-| Campo | Tipo Java | Requisito atendido |
+| Campo | Tipo | Uso |
 |---|---|---|
 | `id` | `int` | Identificador sequencial |
-| `codigo` | `String` | String de tamanho fixo: 8 bytes ASCII (`CAR00001`) |
-| `nome` | `String` | String de tamanho variável |
-| `dataRegistro` | `LocalDate` | Data |
-| `caracteristicas` | `List<String>` | Lista de valores; no CSV usa `|` como separador |
-| `ano` | `int` | Valor inteiro |
+| `codigo` | `String` fixa | Código de 8 bytes ASCII, como `CAR00001` |
+| `nome` | `String` variável | Nome do automóvel |
+| `dataRegistro` | `LocalDate` | Data do registro |
+| `caracteristicas` | `List<String>` | Lista de características |
+| `ano` | `int` | Ano do automóvel |
 
-Exemplo de registro:
+Na serialização, `codigo` ocupa exatamente 8 bytes. O nome e cada item da lista
+são gravados em formato UTF, e a data é armazenada como a quantidade de dias da
+época (`LocalDate.toEpochDay()`).
 
-```text
-Carro{id=1, codigo='CAR00001', nome='chevrolet chevelle malibu',
-dataRegistro=1970-01-01, caracteristicas=[origem-eua, 8-cilindros], ano=1970}
-```
+## Arquivo binário
 
-## Serialização
-`Carro.toByteArray()` usa `ByteArrayOutputStream` e `DataOutputStream`.
-
-`Carro.fromByteArray()` usa `ByteArrayInputStream` e `DataInputStream`.
-
-Ordem dos dados serializados:
-
-1. `int id`
-2. `8 bytes codigo`
-3. `UTF nome`
-4. `long dataRegistro` usando `LocalDate.toEpochDay()`
-5. `int quantidadeCaracteristicas`
-6. cada característica como `UTF`
-7. `int ano`
-
-## Estrutura do arquivo binário
-O arquivo principal é `data/dados.db`.
+O arquivo principal é gerado em `data/dados.db` com o seguinte formato:
 
 ```text
 [int ultimoId]
@@ -61,132 +40,119 @@ O arquivo principal é `data/dados.db`.
 ...
 ```
 
-Convenção de lápide:
+Convenção da lápide:
 
-- `0` = registro ativo
-- `1` = registro excluído
+- `0`: registro ativo;
+- `1`: registro excluído.
 
-O cabeçalho guarda o maior ID já utilizado. IDs apagados não são reutilizados.
+O cabeçalho preserva o maior ID já utilizado. IDs excluídos não são reutilizados.
+O arquivo `data/dados.db` é gerado durante a carga e não é versionado.
+
+## Carga do arquivo
+
+A classe `service.Importador` lê `data/base.csv`, valida os campos, cria objetos
+`Carro` e grava os registros ativos no arquivo binário. A carga reinicializa o
+arquivo e atualiza o cabeçalho com o último ID importado.
+
+## CRUD sequencial
+
+### Create
+
+Lê e incrementa `ultimoId`, atualiza o cabeçalho, atribui o novo ID e escreve o
+registro ativo no fim do arquivo.
+
+### Read
+
+Percorre o arquivo depois do cabeçalho, ignora registros com lápide e retorna
+somente a versão ativa do ID procurado.
+
+### Update
+
+- Mesmo tamanho: sobrescreve os bytes no endereço atual.
+- Tamanho diferente: marca a versão anterior como excluída e grava a nova versão
+  no fim do arquivo, preservando o ID.
+
+Essa regra é aplicada quando o registro aumenta ou diminui.
+
+### Delete
+
+Altera apenas a lápide do registro ativo. A remoção física ocorre durante a
+ordenação externa.
+
+## Ordenação Externa
+
+A opção de ordenação permite escolher entre duas formas de geração dos runs. As
+duas terminam com intercalação balanceada e substituem `data/dados.db` por um
+arquivo ordenado e compactado.
+
+### Intercalação Balanceada Comum
+
+1. Lê no máximo `N` registros ativos por bloco.
+2. Ignora registros excluídos.
+3. Ordena o bloco por ID com insertion sort implementado no projeto.
+4. Grava um run ordenado.
+5. Distribui os runs em round-robin pelo número de caminhos informado.
+6. Intercala grupos de até `K` runs até restar um único run.
+
+Na intercalação, somente o registro corrente de cada caminho permanece em
+memória. A escolha da menor cabeça é feita por uma varredura manual.
+
+### Seleção por Substituição
+
+1. Preenche a memória com até `M` registros ativos.
+2. Seleciona manualmente o menor registro não congelado.
+3. Escreve o registro no run atual e lê o próximo registro do arquivo.
+4. Mantém o novo registro elegível quando seu ID é maior ou igual ao último ID escrito.
+5. Congela o registro para o run seguinte quando seu ID é menor.
+6. Finaliza o run quando todos os itens em memória estão congelados.
+7. Descongela os itens e inicia o próximo run.
+8. Distribui os runs pelos caminhos e aplica a mesma intercalação balanceada.
+
+A seleção do menor item não utiliza fila de prioridade. Em qualquer instante,
+a memória contém no máximo `M` registros, além das cabeças da intercalação.
+
+### Resultado da ordenação
+
+O arquivo final:
+
+- contém somente registros ativos;
+- fica em ordem crescente de ID;
+- remove fisicamente lápides e versões antigas de updates;
+- preserva o `ultimoId` do cabeçalho;
+- continua sendo utilizado pelo CRUD.
+
+Antes da substituição, o arquivo ordenado é concluído separadamente. O arquivo
+anterior é mantido como backup local ignorado pelo Git.
 
 ## Estrutura do projeto
 
 ```text
-TP1-AEDS3-GRUPO15-CARROS/
-├── src/
-│   ├── Main.java
-│   ├── TesteTP1.java
-│   ├── model/
-│   │   └── Carro.java
-│   ├── dao/
-│   │   └── ArquivoSequencial.java
-│   ├── service/
-│   │   ├── Importador.java
-│   │   └── OrdenacaoExterna.java
-│   └── util/
-│       └── CsvUtil.java
-├── data/
-│   ├── base.csv
-│   └── dados.db
-├── temp/
-├── compilar.bat
-├── executar.bat
-├── testar.bat
-├── RESULTADO_TESTES.txt
-└── README.md
+src/
+├── Main.java
+├── TesteTP1.java
+├── dao/ArquivoSequencial.java
+├── model/Carro.java
+├── service/Importador.java
+├── service/OrdenacaoExterna.java
+└── util/CsvUtil.java
+data/
+└── base.csv
+temp/
+└── .gitkeep
 ```
 
-## Funcionalidades
-Menu por terminal com:
+## Como compilar
 
-1. Carregar base de dados
-2. Criar registro
-3. Ler registro
-4. Atualizar registro
-5. Excluir registro
-6. Ordenação externa
-7. Listar registros ativos
-8. Visualizar estrutura física do arquivo
-0. Sair
-
-## CRUD
-
-### Create
-- lê `ultimoId` do cabeçalho;
-- incrementa o ID;
-- gera o código fixo, por exemplo `CAR00061`;
-- atualiza o cabeçalho;
-- serializa o carro;
-- grava no fim do arquivo com lápide ativa.
-
-### Read
-A busca é sequencial. O programa percorre o arquivo desde o primeiro registro, ignora registros apagados e retorna o carro ativo com o ID solicitado.
-
-### Update
-Existem dois casos obrigatórios:
-
-**Mesmo tamanho:** os novos bytes substituem os antigos no mesmo endereço físico.
-
-**Tamanho diferente:** a versão antiga recebe lápide `1` e a nova versão é gravada no final do arquivo, preservando o mesmo ID.
-
-### Delete
-A exclusão é lógica. Somente a lápide é alterada para `1`; os bytes permanecem fisicamente no arquivo até a ordenação/compactação.
-
-## Ordenação externa
-A chave de ordenação é o `id`.
-
-O método recebe:
-
-- número de caminhos;
-- máximo de registros permitidos em memória.
-
-### Distribuição
-1. lê no máximo `N` registros ativos por vez;
-2. ignora lápides;
-3. ordena apenas o bloco carregado em memória;
-4. grava um run temporário ordenado;
-5. distribui os runs entre os caminhos temporários.
-
-O arquivo inteiro nunca é carregado de uma vez na RAM.
-
-### Intercalação
-Os runs são intercalados em grupos limitados pelo número de caminhos informado. Uma `PriorityQueue` mantém o menor ID disponível entre os arquivos abertos.
-
-São realizadas quantas passagens forem necessárias até restar um único run ordenado.
-
-### Compactação
-Ao final, é criado um novo `dados.db` contendo somente registros ativos em ordem crescente de ID. Assim, a ordenação remove fisicamente:
-
-- registros apagados;
-- versões antigas de updates;
-- espaços deixados pelas lápides.
-
-Depois da substituição, todo CRUD continua usando `data/dados.db`, agora ordenado e compactado.
-
-## Inspeção física
-A opção 8 mostra:
-
-```text
-Cabeçalho: últimoId = X
-
-Posição: 4
-Lápide: 0 (ativo)
-Tamanho: ...
-ID: 1
-```
-
-Isso facilita demonstrar atualizações, exclusões e compactação ao professor.
-
-## Como compilar — Windows
-Na pasta raiz do projeto:
+No Windows:
 
 ```bat
 compilar.bat
 ```
 
-Ou manualmente:
+Ou diretamente:
 
-```bat
-javac -encoding UTF-8 -d out src\Main.java src\TesteTP1.java src\model\Carro.java src\dao\ArquivoSequencial.java src\service\Importador.java src\service\OrdenacaoExterna.java src\util\CsvUtil.java
+```text
+javac -encoding UTF-8 -d out src/Main.java src/TesteTP1.java src/model/Carro.java src/dao/ArquivoSequencial.java src/service/Importador.java src/service/OrdenacaoExterna.java src/util/CsvUtil.java
 ```
 
 ## Como executar
@@ -197,11 +163,11 @@ executar.bat
 
 Ou:
 
-```bat
+```text
 java -cp out Main
 ```
 
-## Como executar os testes
+## Como testar
 
 ```bat
 testar.bat
@@ -209,50 +175,34 @@ testar.bat
 
 Ou:
 
-```bat
+```text
 java -cp out TesteTP1
 ```
 
-## Testes realizados
-Foram executados testes de integração para:
+Os testes cobrem carga, Create, Read, os dois casos de Update, Delete, as duas
+estratégias de ordenação e o CRUD depois de cada estratégia. Também verificam:
 
-1. carga CSV → binário;
-2. Create;
-3. Read de ID existente, inexistente e apagado;
-4. Update com mesmo tamanho;
-5. Update com tamanho diferente;
-6. Delete;
-7. ordenação externa e remoção física das lápides;
-8. CRUD depois da ordenação.
+- ausência de registros perdidos ou duplicados;
+- ordem crescente dos IDs;
+- remoção física das lápides;
+- preservação do último ID;
+- runs ordenados na seleção por substituição;
+- congelamento de registros;
+- parâmetros e arquivos inválidos;
+- EOF inesperado.
 
-No teste da ordenação foram usados:
+O cenário da intercalação comum usa 4 caminhos e 7 registros em memória. O
+cenário da seleção por substituição usa 4 caminhos, memória 5 e IDs em ordem
+física propositalmente irregular.
 
-- **4 caminhos**;
-- **máximo de 7 registros em memória**.
-
-Isso força a criação de vários blocos e comprova que a implementação é realmente externa.
-
-## Resultado dos testes
-Todos os testes obrigatórios passaram.
-
-Resultado da ordenação de teste:
+Resultados obtidos na execução de teste:
 
 ```text
-registros=59, blocos iniciais=9, passagens de intercalação=2
+Intercalação Balanceada: registros=59, runs iniciais=9, passagens=2
+Seleção por Substituição: registros=17, runs iniciais=2, passagens=1, congelados=5
+CRUD após ordenação: OK
 ```
 
-## Decisões de implementação
-- Projeto sem framework externo.
-- CRUD feito diretamente sobre `RandomAccessFile`.
-- Nenhum banco SQL ou JSON é usado como armazenamento principal.
-- IDs não são reutilizados.
-- A exclusão é lógica por lápide.
-- A ordenação externa não carrega o arquivo inteiro na memória.
-- O código foi mantido simples e dividido em entidade, DAO, importação e ordenação para facilitar a explicação em apresentação.
-- Não foram implementadas etapas futuras como Árvore B+, Hash, Lista Invertida, Huffman, LZW, casamento de padrões ou criptografia.
-
-## Identificação da entrega
-**Grupo 15 — Tema: Carros**
-
-**Gabriel Benicio Fonseca**  
-**Rhayner Martins**
+O escopo deste TP1 termina no CRUD sequencial e na ordenação externa. Estruturas
+de indexação, compressão, casamento de padrões e criptografia não são
+implementadas nesta etapa.
