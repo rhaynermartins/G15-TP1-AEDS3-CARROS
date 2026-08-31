@@ -1,0 +1,6 @@
+out/
+build-test/
+temp/*
+data/dados.db
+data/dados_ordenados.db
+data/*.bak
