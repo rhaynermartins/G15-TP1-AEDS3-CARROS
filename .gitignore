@@ -1,7 +1,10 @@
 out/
+bin/
 build-test/
+*.class
+*.run
+*.bak
 temp/*
 !temp/.gitkeep
 data/dados.db
 data/dados_ordenados.db
-data/*.bak
