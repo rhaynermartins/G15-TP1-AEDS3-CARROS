@@ -307,19 +307,20 @@ public class OrdenacaoExterna {
     }
 
     private Carro lerProximoRun(DataInputStream in) throws IOException {
-        try {
-            int tamanho = in.readInt();
-            if (tamanho < 0 || tamanho > 10_000_000) {
-                throw new IOException("Tamanho inválido em run temporário.");
-            }
-            byte[] dados = new byte[tamanho];
-            in.readFully(dados);
-            Carro carro = new Carro();
-            carro.fromByteArray(dados);
-            return carro;
-        } catch (EOFException e) {
-            return null;
+        int primeiroByte = in.read();
+        if (primeiroByte < 0) return null;
+        int tamanho = (primeiroByte << 24)
+                | (in.readUnsignedByte() << 16)
+                | (in.readUnsignedByte() << 8)
+                | in.readUnsignedByte();
+        if (tamanho < 0 || tamanho > 10_000_000) {
+            throw new IOException("Tamanho inválido em run temporário.");
         }
+        byte[] dados = new byte[tamanho];
+        in.readFully(dados);
+        Carro carro = new Carro();
+        carro.fromByteArray(dados);
+        return carro;
     }
 
     private int contarRun(Path run) throws IOException {
