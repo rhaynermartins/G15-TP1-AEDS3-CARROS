@@ -356,15 +356,27 @@ public class OrdenacaoExterna {
         }
     }
 
-    /** Limpa temporários recursivamente sem usar ordenação pronta. */
+    /** Limpa somente o conteúdo gerado, preservando a pasta e seu marcador Git. */
     private void limparDiretorio(Path diretorio) throws IOException {
         if (!Files.exists(diretorio)) return;
-        if (Files.isDirectory(diretorio)) {
-            try (DirectoryStream<Path> filhos = Files.newDirectoryStream(diretorio)) {
-                for (Path filho : filhos) limparDiretorio(filho);
+        try (DirectoryStream<Path> filhos = Files.newDirectoryStream(diretorio)) {
+            for (Path filho : filhos) {
+                if (!filho.getFileName().toString().equals(".gitkeep")) {
+                    apagarRecursivamente(filho);
+                }
             }
         }
-        Files.deleteIfExists(diretorio);
+    }
+
+    /** Remove uma árvore temporária sem depender de ordenação pronta. */
+    private void apagarRecursivamente(Path caminho) throws IOException {
+        if (!Files.exists(caminho)) return;
+        if (Files.isDirectory(caminho)) {
+            try (DirectoryStream<Path> filhos = Files.newDirectoryStream(caminho)) {
+                for (Path filho : filhos) apagarRecursivamente(filho);
+            }
+        }
+        Files.deleteIfExists(caminho);
     }
 
     private static class ItemMemoria {
