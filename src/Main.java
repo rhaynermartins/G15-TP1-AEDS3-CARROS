@@ -94,7 +94,7 @@ public class Main {
     private void criar() throws IOException {
         String nome = lerStringObrigatoria("Modelo/nome do carro: ");
         List<String> caracteristicas = lerLista("Características separadas por | (pode deixar vazio): ");
-        int ano = lerInt("Ano: ", 1);
+        int ano = lerAno("Ano: ");
         LocalDate data = lerData("Data de registro (AAAA-MM-DD): ");
 
         Carro p = new Carro(0, "", nome, data, caracteristicas, ano);
@@ -123,7 +123,7 @@ public class Main {
         String caracteristicasTexto = lerOpcional("Características separadas por | [" + String.join("|", atual.getCaracteristicas()) + "]: ",
                 String.join("|", atual.getCaracteristicas()));
         List<String> caracteristicas = parseLista(caracteristicasTexto);
-        int ano = lerIntOpcional("Ano [" + atual.getAno() + "]: ", atual.getAno());
+        int ano = lerAnoOpcional("Ano [" + atual.getAno() + "]: ", atual.getAno());
         LocalDate data = lerDataOpcional("Data [" + atual.getDataRegistro() + "]: ", atual.getDataRegistro());
 
         Carro novo = new Carro(id, atual.getCodigo(), nome, data, caracteristicas, ano);
@@ -187,13 +187,26 @@ public class Main {
         }
     }
 
-    private int lerIntOpcional(String msg, int atual) {
+    private int lerAno(String msg) {
+        while (true) {
+            int ano = lerInt(msg, -1);
+            if (ano > 0) return ano;
+            System.out.println("Ano inválido. Digite um inteiro maior que zero.");
+        }
+    }
+
+    private int lerAnoOpcional(String msg, int atual) {
         while (true) {
             System.out.print(msg);
             String s = scanner.nextLine().trim();
             if (s.isEmpty()) return atual;
-            try { return Integer.parseInt(s); }
-            catch (NumberFormatException e) { System.out.println("Digite um número inteiro válido."); }
+            try {
+                int ano = Integer.parseInt(s);
+                if (ano > 0) return ano;
+            } catch (NumberFormatException ignored) {
+                // A mensagem de validação é a mesma para qualquer ano inválido.
+            }
+            System.out.println("Ano inválido. Digite um inteiro maior que zero.");
         }
     }
 
