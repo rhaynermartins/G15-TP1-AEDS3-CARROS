@@ -139,9 +139,30 @@ public class Main {
     }
 
     private void ordenar() throws IOException {
+        System.out.println("========== ORDENAÇÃO EXTERNA ==========");
+        System.out.println("1 - Intercalação Balanceada Comum");
+        System.out.println("2 - Intercalação Balanceada com Seleção por Substituição");
+        System.out.println("0 - Voltar");
+        int metodo = lerInt("Escolha o método: ", -1);
+        if (metodo == 0) {
+            System.out.println("Retornando ao menu principal.");
+            return;
+        }
+        if (metodo != 1 && metodo != 2) {
+            System.out.println("Método de ordenação inválido.");
+            return;
+        }
+
         int caminhos = lerInt("Número de caminhos (>= 2): ", -1);
-        int memoria = lerInt("Máximo de registros em memória (>= 1): ", -1);
-        OrdenacaoExterna.ResultadoOrdenacao r = new OrdenacaoExterna().ordenar(DB, TEMP, caminhos, memoria);
+        String mensagemMemoria = metodo == 1
+                ? "Máximo de registros em memória (>= 1): "
+                : "Tamanho da memória da seleção (>= 1): ";
+        int memoria = lerInt(mensagemMemoria, -1);
+
+        OrdenacaoExterna ordenacao = new OrdenacaoExterna();
+        OrdenacaoExterna.ResultadoOrdenacao r = metodo == 1
+                ? ordenacao.ordenar(DB, TEMP, caminhos, memoria)
+                : ordenacao.ordenarComSelecaoPorSubstituicao(DB, TEMP, caminhos, memoria);
         System.out.println("Ordenação e compactação concluídas: " + r);
         System.out.println("O arquivo data/dados.db agora é a versão ordenada usada pelo CRUD.");
     }
