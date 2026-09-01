@@ -32,6 +32,6 @@ Caminhos: 4
 Limite de memória: 1.000
 Runs iniciais: 100
 Passagens: 4
-Tempo de carga: 3.642 ms
-Tempo de ordenação: 4.778 ms
+Tempo de carga: 3.583 ms
+Tempo de ordenação: 4.653 ms
 Tamanho do arquivo binário após carga: 10.042.038 bytes
