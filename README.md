@@ -7,20 +7,22 @@
 
 ## Base de dados
 
-- Auto MPG
-- Fonte: [UCI Machine Learning Repository](https://archive.ics.uci.edu/dataset/9/auto)
+- Used Cars Dataset — Craigslist
+- Fonte: [Kaggle — Austin Reese](https://www.kaggle.com/datasets/austinreese/craigslist-carstrucks-data)
 - Arquivo utilizado: `data/base.csv`
-- Recorte utilizado: 60 automóveis
+- Base original: aproximadamente 426.880 anúncios
+- Recorte utilizado: 100.000 registros
 
-A base foi adaptada para os campos usados pela entidade `Carro`. O CSV é
-carregado no arquivo binário utilizado pelo CRUD.
+Os registros vieram de anúncios reais de veículos do Craigslist. O nome combina
+fabricante e modelo, `dataRegistro` usa `posting_date` e as características do
+veículo são reunidas em uma lista separada por `|`.
 
 ## Entidade Carro
 
 | Campo | Tipo |
 |---|---|
 | id | int |
-| codigo | String fixa de 8 bytes |
+| codigo | String fixa de 12 bytes |
 | nome | String variável |
 | dataRegistro | LocalDate |
 | caracteristicas | List&lt;String&gt; |
@@ -83,3 +85,4 @@ Resultados da ordenação:
 
 - Intercalação Balanceada: 59 registros, 9 runs iniciais e 2 passagens.
 - Seleção por Substituição: 17 registros, 2 runs iniciais e 1 passagem.
+- Base de 100.000 registros: 100 runs iniciais e 4 passagens.
