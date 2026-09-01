@@ -11,14 +11,14 @@ import java.util.Objects;
  * Entidade principal do TP1.
  *
  * Requisitos atendidos:
- * - String de tamanho fixo: codigo (8 bytes ASCII no arquivo serializado);
+ * - String de tamanho fixo: codigo (12 bytes ASCII no arquivo serializado);
  * - String variável: nome;
  * - Data: dataRegistro;
  * - Lista: caracteristicas;
  * - Inteiro: ano.
  */
 public class Carro {
-    public static final int TAMANHO_CODIGO = 8;
+    public static final int TAMANHO_CODIGO = 12;
 
     private int id;
     private String codigo;
@@ -42,7 +42,7 @@ public class Carro {
 
     /**
      * Serializa o objeto em uma sequência reversível de bytes.
-     * O código ocupa EXATAMENTE 8 bytes. Os demais campos carregam metadados
+     * O código ocupa EXATAMENTE 12 bytes. Os demais campos carregam metadados
      * suficientes para que fromByteArray reconstrua o objeto integralmente.
      */
     public byte[] toByteArray() throws IOException {
@@ -93,7 +93,7 @@ public class Carro {
         }
     }
 
-    /** Garante exatamente 8 caracteres ASCII, preenchendo com espaços quando necessário. */
+    /** Garante exatamente 12 caracteres ASCII, preenchendo com espaços quando necessário. */
     public static String normalizarCodigo(String valor) {
         String s = valor == null ? "" : valor.trim().toUpperCase();
         if (s.length() > TAMANHO_CODIGO) {
@@ -103,7 +103,7 @@ public class Carro {
     }
 
     public static String codigoPorId(int id) {
-        return String.format("CAR%05d", id);
+        return String.format("CAR%09d", id);
     }
 
     public int getId() { return id; }
