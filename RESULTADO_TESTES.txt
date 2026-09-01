@@ -1,24 +1,37 @@
 Resultados dos testes
 
+Base principal: 100.000 registros
+
 Carga: OK
 Create: OK
 Read: OK
 Update mesmo tamanho: OK
 Update tamanho diferente: OK
 Delete: OK
+CRUD: OK
 
 Intercalação Balanceada: OK
 Seleção por Substituição: OK
-
 CRUD após ordenação: OK
+Teste da base de 100.000: OK
 
-Intercalação Balanceada:
+Intercalação Balanceada — cenário funcional:
 Registros: 59
 Runs iniciais: 9
 Passagens: 2
 
-Seleção por Substituição:
+Seleção por Substituição — cenário funcional:
 Registros: 17
 Runs iniciais: 2
 Passagens: 1
 Registros congelados: 5
+
+Intercalação Balanceada — base de 100.000:
+Registros: 100.000
+Caminhos: 4
+Limite de memória: 1.000
+Runs iniciais: 100
+Passagens: 4
+Tempo de carga: 3.642 ms
+Tempo de ordenação: 4.778 ms
+Tamanho do arquivo binário após carga: 10.042.038 bytes
