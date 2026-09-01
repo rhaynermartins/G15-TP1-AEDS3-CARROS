@@ -2,8 +2,12 @@ import dao.ArquivoSequencial;
 import model.Carro;
 import service.Importador;
 import service.OrdenacaoExterna;
+import util.CsvUtil;
 
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -18,9 +22,13 @@ import java.util.Set;
 /** Testes de integração simples, sem framework externo. */
 public class TesteTP1 {
     private static final Path RAIZ = Paths.get("build-test");
-    private static final Path CSV = Paths.get("data", "base.csv");
+    private static final Path CSV_PRINCIPAL = Paths.get("data", "base.csv");
 
     public static void main(String[] args) throws Exception {
+        if (args.length == 1 && args[0].equals("--base-100k")) {
+            testarBase100K();
+            return;
+        }
         apagar(RAIZ);
         Files.createDirectories(RAIZ);
 
@@ -40,15 +48,18 @@ public class TesteTP1 {
         Files.createDirectories(cenario.resolve("data"));
         Path db = cenario.resolve("data/dados.db");
         ArquivoSequencial arquivo = new ArquivoSequencial(db);
+        Path csvPequeno = cenario.resolve("data/base-pequena.csv");
+        criarCsvPequeno(csvPequeno, 60);
 
         System.out.println("TESTE 1 — CARGA");
-        Importador.ResultadoImportacao imp = new Importador().carregarBase(CSV, db);
+        Importador.ResultadoImportacao imp = new Importador().carregarBase(csvPequeno, db);
         exigir(imp.importados == 60, "Devem ser importados 60 registros");
         exigir(arquivo.getUltimoId() == 60, "Cabeçalho deve ser 60");
         exigir(arquivo.contarAtivos() == 60, "Devem existir 60 registros ativos");
-        exigir(arquivo.read(1) != null
-                && arquivo.read(1).getNome().equals("chevrolet chevelle malibu"),
+        exigir(arquivo.read(1) != null && !arquivo.read(1).getNome().isBlank(),
                 "Leitura do primeiro registro");
+        exigir(arquivo.read(1).getCodigo().equals("CAR000000001"),
+                "Código fixo do primeiro registro");
         ok();
 
         System.out.println("TESTE 2 — CREATE");
@@ -142,6 +153,152 @@ public class TesteTP1 {
         testarCrudDepoisDaOrdenacao(arquivo);
         ok();
         return new ResultadoCenario(ordenacao);
+    }
+
+    /** Validação e benchmark executados separadamente da suíte funcional rápida. */
+    private static void testarBase100K() throws Exception {
+        Path db = Paths.get("data", "dados.db");
+        Path temporarios = Paths.get("temp", "base-100k");
+        apagar(temporarios);
+
+        System.out.println("TESTE BASE 100.000 — INTEGRIDADE DO CSV");
+        int registrosCsv = validarCsvPrincipal(CSV_PRINCIPAL);
+        exigir(registrosCsv == 100_000, "CSV deve conter exatamente 100.000 registros");
+        ok();
+
+        System.out.println("TESTE BASE 100.000 — CARGA COMPLETA");
+        long inicioCarga = System.nanoTime();
+        Importador.ResultadoImportacao importacao = new Importador()
+                .carregarBase(CSV_PRINCIPAL, db);
+        long tempoCargaMs = nanosParaMillis(System.nanoTime() - inicioCarga);
+        long tamanhoDbAposCarga = Files.size(db);
+        ArquivoSequencial arquivo = new ArquivoSequencial(db);
+
+        exigir(importacao.importados == 100_000, "Carga deve importar 100.000 registros");
+        exigir(importacao.ignorados == 0, "Carga não deve ignorar registros");
+        exigir(arquivo.getUltimoId() == 100_000, "Último ID da carga deve ser 100000");
+        exigir(arquivo.contarAtivos() == 100_000, "Devem existir 100.000 registros ativos");
+        validarLeituraECodigo(arquivo, 1, "CAR000000001");
+        validarLeituraECodigo(arquivo, 50_000, "CAR000050000");
+        validarLeituraECodigo(arquivo, 99_999, "CAR000099999");
+        validarLeituraECodigo(arquivo, 100_000, "CAR000100000");
+        exigir(arquivo.read(100_001) == null, "ID 100001 não deve existir antes do Create");
+        ok();
+
+        System.out.println("TESTE BASE 100.000 — INTERCALAÇÃO BALANCEADA");
+        long inicioOrdenacao = System.nanoTime();
+        OrdenacaoExterna.ResultadoOrdenacao ordenacao = new OrdenacaoExterna()
+                .ordenar(db, temporarios, 4, 1_000);
+        long tempoOrdenacaoMs = nanosParaMillis(System.nanoTime() - inicioOrdenacao);
+
+        List<Carro> ordenados = arquivo.listarAtivos();
+        boolean[] idsEncontrados = new boolean[100_001];
+        int duplicados = 0;
+        for (int i = 0; i < ordenados.size(); i++) {
+            Carro atual = ordenados.get(i);
+            exigir(atual.getId() == i + 1, "IDs devem permanecer consecutivos e crescentes");
+            if (idsEncontrados[atual.getId()]) duplicados++;
+            idsEncontrados[atual.getId()] = true;
+        }
+        exigir(ordenacao.registrosOrdenados == 100_000, "Ordenação deve processar 100.000 registros");
+        exigir(ordenacao.runsIniciais > 1, "Ordenação grande deve gerar múltiplos runs");
+        exigir(ordenacao.passagensIntercalacao > 1, "Ordenação grande deve ter múltiplas passagens");
+        exigir(ordenados.size() == 100_000, "Ordenação não pode perder registros");
+        exigir(duplicados == 0, "Ordenação não pode duplicar IDs");
+        exigir(arquivo.contarLapides() == 0, "Ordenação deve remover todas as lápides");
+        exigir(arquivo.getUltimoId() == 100_000, "Ordenação deve preservar ultimoId");
+        ok();
+
+        System.out.println("TESTE BASE 100.000 — CRUD APÓS ORDENAÇÃO");
+        Carro criado = carro(0, "veiculo-teste-100001", 2025);
+        int novoId = arquivo.create(criado);
+        exigir(novoId == 100_001, "Create após carga deve gerar ID 100001");
+        exigir(criado.getCodigo().equals("CAR000100001"), "Código do novo registro deve usar 12 bytes");
+        exigir(arquivo.read(novoId) != null, "Read do ID 100001 deve funcionar");
+
+        ArquivoSequencial.InfoRegistro antesMesmoTamanho = arquivo.localizarFisicamenteAtivo(novoId);
+        long tamanhoAntesMesmoTamanho = Files.size(db);
+        criado.setAno(2026);
+        exigir(arquivo.update(criado), "Update de mesmo tamanho na base grande");
+        exigir(arquivo.localizarFisicamenteAtivo(novoId).posicao == antesMesmoTamanho.posicao,
+                "Update de mesmo tamanho deve manter endereço");
+        exigir(Files.size(db) == tamanhoAntesMesmoTamanho,
+                "Update de mesmo tamanho não deve aumentar o arquivo");
+
+        long posicaoAntesTamanhoDiferente = arquivo.localizarFisicamenteAtivo(novoId).posicao;
+        criado.setNome("veiculo-teste-100001-com-nome-maior");
+        exigir(arquivo.update(criado), "Update de tamanho diferente na base grande");
+        exigir(arquivo.localizarFisicamenteAtivo(novoId).posicao != posicaoAntesTamanhoDiferente,
+                "Update de tamanho diferente deve mover o registro");
+        exigir(arquivo.delete(novoId), "Delete na base grande");
+        exigir(arquivo.read(novoId) == null, "Registro excluído não deve ser lido");
+        ok();
+
+        apagar(temporarios);
+        System.out.println("BASE100K_RESULTADO");
+        System.out.println("registros_csv=" + registrosCsv);
+        System.out.println("importados=" + importacao.importados);
+        System.out.println("ignorados=" + importacao.ignorados);
+        System.out.println("tamanho_db_apos_carga_bytes=" + tamanhoDbAposCarga);
+        System.out.println("tempo_carga_ms=" + tempoCargaMs);
+        System.out.println("tempo_ordenacao_ms=" + tempoOrdenacaoMs);
+        System.out.println("runs_iniciais=" + ordenacao.runsIniciais);
+        System.out.println("passagens=" + ordenacao.passagensIntercalacao);
+        System.out.println("registros_finais=" + ordenacao.registrosOrdenados);
+        System.out.println("ids_duplicados=" + duplicados);
+        System.out.println("lapides_finais=0");
+        System.out.println("ultimo_id_apos_ordenacao=100000");
+        System.out.println("codigo_id_1=CAR000000001");
+        System.out.println("codigo_id_99999=CAR000099999");
+        System.out.println("codigo_id_100000=CAR000100000");
+        System.out.println("codigo_id_100001=CAR000100001");
+    }
+
+    private static int validarCsvPrincipal(Path csv) throws IOException {
+        exigir(Files.exists(csv), "data/base.csv deve existir");
+        int registros = 0;
+        try (BufferedReader leitor = Files.newBufferedReader(csv, StandardCharsets.UTF_8)) {
+            String cabecalho = leitor.readLine();
+            exigir("nome;caracteristicas;ano;data_registro".equals(cabecalho),
+                    "Cabeçalho do CSV principal");
+            String linha;
+            while ((linha = leitor.readLine()) != null) {
+                List<String> campos = CsvUtil.separarLinha(linha, ';');
+                exigir(campos.size() == 4, "Cada linha do CSV deve possuir quatro campos");
+                exigir(!campos.get(0).isBlank(), "Nome não pode ser vazio");
+                int ano = Integer.parseInt(campos.get(2));
+                exigir(ano >= 1886 && ano <= LocalDate.now().getYear() + 1, "Ano válido");
+                LocalDate.parse(campos.get(3));
+                registros++;
+            }
+        }
+        return registros;
+    }
+
+    private static void validarLeituraECodigo(
+            ArquivoSequencial arquivo, int id, String codigoEsperado) throws IOException {
+        Carro carro = arquivo.read(id);
+        exigir(carro != null, "ID " + id + " deve existir");
+        exigir(carro.getCodigo().equals(codigoEsperado), "Código correto para ID " + id);
+        exigir(carro.getCodigo().getBytes(StandardCharsets.US_ASCII).length == 12,
+                "Código deve ocupar 12 bytes ASCII");
+    }
+
+    private static long nanosParaMillis(long nanos) {
+        return nanos / 1_000_000L;
+    }
+
+    private static void criarCsvPequeno(Path destino, int quantidade) throws IOException {
+        Files.createDirectories(destino.getParent());
+        try (BufferedReader leitor = Files.newBufferedReader(CSV_PRINCIPAL, StandardCharsets.UTF_8);
+             BufferedWriter escritor = Files.newBufferedWriter(destino, StandardCharsets.UTF_8)) {
+            for (int i = 0; i <= quantidade; i++) {
+                String linha = leitor.readLine();
+                if (linha == null) throw new IOException("CSV principal possui registros insuficientes.");
+                escritor.write(linha);
+                escritor.newLine();
+            }
+        }
     }
 
     private static void testarValidacoes() throws Exception {
